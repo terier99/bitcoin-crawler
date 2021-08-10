@@ -10,25 +10,21 @@ from pytrends.request import TrendReq
 import requests
 from bs4 import BeautifulSoup
 
-def main():
-    # 구글 스프레드 시트 연결
-    #json_file_name =
-    data = {
-      # paste your credentials.json file here
-        }
+data = {
+  # paste your credentials.json file here
+    }
 
-    spreadsheet_url = 'https://docs.google.com/spreadsheets/d/176H2IPAMJWXS_QWMnb7OaNSXTShLj4ZD4LtIkqKLp1c/edit#gid=0'
+scope = [
+'https://spreadsheets.google.com/feeds',
+'https://www.googleapis.com/auth/drive',
+]
 
-    scope = [
-    'https://spreadsheets.google.com/feeds',
-    'https://www.googleapis.com/auth/drive',
-    ]
+spreadsheet_url = 'https://docs.google.com/spreadsheets/d/176H2IPAMJWXS_QWMnb7OaNSXTShLj4ZD4LtIkqKLp1c/edit#gid=0'
 
-
+def fetch_upbit_data():
     searchvolume_df = pd.DataFrame()
     searchchanges_df = pd.DataFrame()
     change_15_df = pd.DataFrame()
-    newsvolume_df = pd.DataFrame()
 
     for coin in coin_list:
       import datetime
@@ -92,8 +88,10 @@ def main():
             searchchanges_df = new_df
         else:
             searchchanges_df =  pd.concat([searchchanges_df, new_df])
+    return searchvolume_df, searchchanges_df, change_15_df, tmp_df
 
-    # 뉴스 정보 크롤링
+def fetch_naver_news(tmp_df):
+    newsvolume_df = pd.DataFrame()
     for date in tmp_df['date']:
       og_date = date
       date = str(date)[:10]
@@ -114,39 +112,29 @@ def main():
         newsvolume_df = tmp_news
       else:
         newsvolume_df = pd.concat([newsvolume_df, tmp_news])
+    return newsvolume_df
 
+def insert_to_spreadsheet(worksheet_name, dataFrame):
+    #권한 인증
     credentials = ServiceAccountCredentials.from_json_keyfile_dict(data,scope)
     gc = gspread.authorize(credentials)
 
     doc = gc.open_by_url(spreadsheet_url)
     #시트 선택
-    worksheet = doc.worksheet('searchvolume')
-    doc.values_clear("'searchvolume'")
-    set_with_dataframe(worksheet, searchvolume_df)
+    worksheet = doc.worksheet(worksheet_name)
+    doc.values_clear("'"worksheet_name"'")
+    set_with_dataframe(worksheet, dataFrame)
 
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(data,scope)
-    gc = gspread.authorize(credentials)
 
-    doc = gc.open_by_url(spreadsheet_url)
-    #시트 선택
-    worksheet2 = doc.worksheet('searchchanges')
-    doc.values_clear("'searchchanges'")
-    set_with_dataframe(worksheet2, searchchanges_df)
+def main():
+    # upbit 정보 크롤링
+    searchvolume_df, searchchanges_df, change_15_df, tmp_df = fetch_upbit_data()
+    # 뉴스 정보 크롤링 tmp_df 는 날짜 정보 받아오는 용도
+    newsvolume_df = fetch_naver_news(tmp_df)
 
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(data,scope)
-    gc = gspread.authorize(credentials)
+    # 각각의 시트에 알맞은 정보 삽입
 
-    doc = gc.open_by_url(spreadsheet_url)
-    #시트 선택
-    worksheet3 = doc.worksheet('change_15')
-    doc.values_clear("'change_15'")
-    set_with_dataframe(worksheet3, change_15_df)
-
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(data,scope)
-    gc = gspread.authorize(credentials)
-
-    doc = gc.open_by_url(spreadsheet_url)
-    #시트 선택
-    worksheet4 = doc.worksheet('newsvolume')
-    doc.values_clear("'newsvolume'")
-    set_with_dataframe(worksheet4, newsvolume_df)
+    worksheet_list = ['searchvolume','searchchanges','change_15','newsvolume']
+    dataFrame_list = [searchvolume_df, searchchanges_df, change_15_df, newsvolume_df]
+    for worksheet_name, dataFrame in zip(worksheet_list, dataFrame_list):
+        insert_to_spreadsheet(worksheet_name, dataFrame)
